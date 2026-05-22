@@ -101,13 +101,24 @@ export default async function HomePage() {
 
   const isLive = rssResult.ok && rssResult.articles.length > 0;
 
+  // RSS 임베디드 이미지 있는 기사를 우선 (시간순 유지 안에서)
+  // → Latest 사이드바에 진짜 기사 사진이 많이 들어가도록
+  const sortedByImageThenTime = isLive
+    ? [...rssResult.articles].sort((a, b) => {
+        const aImg = (a as Article & { imageSource?: string }).imageSource === "rss" ? 1 : 0;
+        const bImg = (b as Article & { imageSource?: string }).imageSource === "rss" ? 1 : 0;
+        if (aImg !== bImg) return bImg - aImg;
+        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+      })
+    : [];
+
   const rawLatest: Article[] = isLive
-    ? rssResult.articles.slice(0, 12)
+    ? sortedByImageThenTime.slice(0, 12)
     : MOCK_ARTICLES.slice(0, 8);
 
   const rawMore: Article[] = isLive
     ? [
-        ...rssResult.articles.slice(12, 22),
+        ...sortedByImageThenTime.slice(12, 22),
         ...MOCK_ARTICLES.filter((a) => a.dataLabel === "ANALYSIS"),
       ].slice(0, 10)
     : MOCK_ARTICLES;
