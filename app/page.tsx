@@ -18,17 +18,18 @@ export const revalidate = 300;
 
 const MUSK_PATTERN = /\belon\b|\bmusk\b/i;
 
-// Wikimedia Commons — CC-BY / CC-BY-SA, landscape-only (ratio > 1.0)
+// Wikimedia Commons — CC-BY / CC-BY-SA, landscape contextual photos (no face close-ups)
 const MUSK_IMAGES = [
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Elon_Musk_%2812270805983%29.jpg/800px-Elon_Musk_%2812270805983%29.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Elon_Musk_%2812270807823%29.jpg/800px-Elon_Musk_%2812270807823%29.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Elon_Musk_%2812271217906%29.jpg/800px-Elon_Musk_%2812271217906%29.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Elon_Musk_%283017880199%29.jpg/800px-Elon_Musk_%283017880199%29.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Elon_Musk_-_The_Summit_2013.jpg/800px-Elon_Musk_-_The_Summit_2013.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Elon_Musk_4670874048_7c12d5503a_o.jpg/800px-Elon_Musk_4670874048_7c12d5503a_o.jpg",
+  // SpaceX Falcon Heavy post-launch press conference
   "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Elon_Musk_at_a_Press_Conference.jpg/800px-Elon_Musk_at_a_Press_Conference.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg/800px-Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg",
+  // SpaceX Dragon capsule with Musk standing by
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Elon_Musk_4670874048_7c12d5503a_o.jpg/800px-Elon_Musk_4670874048_7c12d5503a_o.jpg",
+  // The Summit 2013 stage
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Elon_Musk_-_The_Summit_2013.jpg/800px-Elon_Musk_-_The_Summit_2013.jpg",
+  // World Government Summit session
   "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Mohammad_Al_Gergawi_and_Elon_Musk_session.jpg/800px-Mohammad_Al_Gergawi_and_Elon_Musk_session.jpg",
+  // Tesla Battery Day event
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg/800px-Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg",
 ];
 
 function titleHash(s: string): number {
