@@ -21,15 +21,15 @@ const MUSK_PATTERN = /\belon\b|\bmusk\b/i;
 // Wikimedia Commons — CC-BY / CC-BY-SA, landscape contextual photos (no face close-ups)
 const MUSK_IMAGES = [
   // SpaceX Falcon Heavy post-launch press conference
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Elon_Musk_at_a_Press_Conference.jpg/800px-Elon_Musk_at_a_Press_Conference.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Elon_Musk_at_a_Press_Conference.jpg/960px-Elon_Musk_at_a_Press_Conference.jpg",
   // SpaceX Dragon capsule with Musk standing by
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Elon_Musk_4670874048_7c12d5503a_o.jpg/800px-Elon_Musk_4670874048_7c12d5503a_o.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Elon_Musk_4670874048_7c12d5503a_o.jpg/960px-Elon_Musk_4670874048_7c12d5503a_o.jpg",
   // The Summit 2013 stage
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Elon_Musk_-_The_Summit_2013.jpg/800px-Elon_Musk_-_The_Summit_2013.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Elon_Musk_-_The_Summit_2013.jpg/960px-Elon_Musk_-_The_Summit_2013.jpg",
   // World Government Summit session
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Mohammad_Al_Gergawi_and_Elon_Musk_session.jpg/800px-Mohammad_Al_Gergawi_and_Elon_Musk_session.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Mohammad_Al_Gergawi_and_Elon_Musk_session.jpg/960px-Mohammad_Al_Gergawi_and_Elon_Musk_session.jpg",
   // Tesla Battery Day event
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg/800px-Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg/960px-Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg",
 ];
 
 function titleHash(s: string): number {
