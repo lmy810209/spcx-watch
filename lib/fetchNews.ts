@@ -1,12 +1,19 @@
 import type { Article, Category, DataLabel } from "./types";
 
-// ─── Google News RSS URLs ───────────────────────────────────────────────────
-const RSS_URL =
-  "https://news.google.com/rss/search?q=SpaceX&hl=en-US&gl=US&ceid=US:en";
-const RSS_MUSK =
-  "https://news.google.com/rss/search?q=%22Elon+Musk%22+SpaceX&hl=en-US&gl=US&ceid=US:en";
+// ─── RSS Feed URLs ──────────────────────────────────────────────────────────
+// Direct space-news feeds that embed <media:content> images in each item
+const DIRECT_FEEDS = [
+  { url: "https://arstechnica.com/space/feed/",  source: "Ars Technica", skipFilter: true },
+  { url: "https://www.space.com/feeds/all",       source: "Space.com",   skipFilter: false },
+];
 
-// ─── XML 파싱 유틸리티 ──────────────────────────────────────────────────────
+// Google News broad-coverage feeds (no embedded images, uses OG fallback)
+const GOOGLE_FEEDS = [
+  "https://news.google.com/rss/search?q=SpaceX&hl=en-US&gl=US&ceid=US:en",
+  "https://news.google.com/rss/search?q=%22Elon+Musk%22+SpaceX&hl=en-US&gl=US&ceid=US:en",
+];
+
+// ─── XML utilities ──────────────────────────────────────────────────────────
 
 function decodeEntities(s: string): string {
   return s
@@ -25,7 +32,6 @@ function stripHTML(s: string): string {
     .trim();
 }
 
-/** 태그 안의 텍스트 추출. CDATA / 일반 텍스트 모두 처리 */
 function extractTag(xml: string, tag: string): string {
   const cdataRe = new RegExp(
     `<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`,
@@ -39,7 +45,6 @@ function extractTag(xml: string, tag: string): string {
   return text ? decodeEntities(text[1]).trim() : "";
 }
 
-/** <source url="...">이름</source> 에서 {name, url} 추출 */
 function extractSource(itemXml: string): { name: string; url: string } {
   const re = /<source\s+url="([^"]*)"[^>]*>([^<]*)<\/source>/i;
   const m = itemXml.match(re);
@@ -47,7 +52,36 @@ function extractSource(itemXml: string): { name: string; url: string } {
   return { name: "External", url: "" };
 }
 
-/** Google News RSS 제목 형식 "기사 제목 - 언론사명" 에서 제목 분리 */
+/** Extract embedded image URL from <media:content>, <media:thumbnail>, <enclosure> */
+function extractMediaImage(itemXml: string): string | undefined {
+  // <media:content url="..." type="image/..."> — prefer larger width
+  const contents: { url: string; width: number }[] = [];
+  const mcRe = /<media:content\s[^>]*url="([^"]+)"[^>]*/gi;
+  let m: RegExpExecArray | null;
+  while ((m = mcRe.exec(itemXml)) !== null) {
+    const wMatch = m[0].match(/width="(\d+)"/);
+    const typeMatch = m[0].match(/type="image\//i);
+    const mediumMatch = m[0].match(/medium="image"/i);
+    if (typeMatch || mediumMatch) {
+      contents.push({ url: m[1], width: wMatch ? parseInt(wMatch[1]) : 0 });
+    }
+  }
+  if (contents.length > 0) {
+    contents.sort((a, b) => b.width - a.width);
+    return contents[0].url;
+  }
+
+  // <media:thumbnail url="...">
+  const mt = itemXml.match(/<media:thumbnail\s[^>]*url="([^"]+)"/i);
+  if (mt) return mt[1];
+
+  // <enclosure url="..." type="image/...">
+  const enc = itemXml.match(/<enclosure\s[^>]*url="([^"]+)"[^>]*type="image\/[^"]+"/i);
+  if (enc) return enc[1];
+
+  return undefined;
+}
+
 function splitGoogleTitle(raw: string): { title: string; pub: string } {
   const idx = raw.lastIndexOf(" - ");
   if (idx > 0) {
@@ -56,7 +90,6 @@ function splitGoogleTitle(raw: string): { title: string; pub: string } {
   return { title: raw, pub: "" };
 }
 
-/** pubDate 문자열 → ISO string */
 function toISO(pubDate: string): string {
   try {
     return new Date(pubDate).toISOString();
@@ -65,35 +98,28 @@ function toISO(pubDate: string): string {
   }
 }
 
-// ─── 카테고리 자동 감지 ──────────────────────────────────────────────────────
+// ─── Category detection ─────────────────────────────────────────────────────
 
 const KEYWORD_MAP: { pattern: RegExp; category: Category }[] = [
-  { pattern: /starlink/i,                                      category: "starlink" },
-  { pattern: /starship/i,                                      category: "starship" },
-  { pattern: /falcon\s?9|falcon\s?heavy/i,                    category: "falcon"   },
-  { pattern: /nasa/i,                                          category: "nasa"     },
-  { pattern: /launch|rocket|orbit|liftoff|booster/i,          category: "launch"   },
-  { pattern: /ipo|valuation|contract|investment|revenue|deal/i, category: "business"},
+  { pattern: /starlink/i,                                        category: "starlink" },
+  { pattern: /starship/i,                                        category: "starship" },
+  { pattern: /falcon\s?9|falcon\s?heavy/i,                      category: "falcon"   },
+  { pattern: /nasa/i,                                            category: "nasa"     },
+  { pattern: /launch|rocket|orbit|liftoff|booster/i,            category: "launch"   },
+  { pattern: /ipo|valuation|flotation|contract|investment|revenue|deal|stock/i, category: "business" },
 ];
 
-// SpaceX와 무관한 기사 필터링 (Grok, Tesla, AI 등 일론 머스크 관련 비우주 기사)
 const SPACEX_RELEVANCE = /spacex|starship|starlink|falcon|rocket|launch|orbit|space\s*x|elon.{0,20}space|reusab|booster|raptor|boca\s*chica|starbase|nasa|faa|payload|satellite/i;
 const IRRELEVANT_TOPICS = /grok|tesla|twitter|x\.com|neuralink|boring\s*company|doge|dogecoin|crypto|bitcoin|ai\s*chatbot|openai|chatgpt/i;
-
 const SPACE_CORE = /spacex|starship|starlink|falcon|rocket|launch|orbit/i;
 
 function isSpaceXRelevant(title: string, desc: string): boolean {
   const titleLower = title.toLowerCase();
   const irrelevantPos = titleLower.search(IRRELEVANT_TOPICS);
   const spacePos      = titleLower.search(SPACE_CORE);
-
-  // Irrelevant topic appears before (or without) any space/rocket keyword in title → filter
   if (irrelevantPos !== -1 && (spacePos === -1 || irrelevantPos < spacePos)) return false;
-
-  // Combined check: irrelevant AND no space relevance at all
   const text = `${title} ${desc}`;
   if (IRRELEVANT_TOPICS.test(text) && !SPACEX_RELEVANCE.test(text)) return false;
-
   return true;
 }
 
@@ -104,7 +130,7 @@ function detectCategory(text: string): Category {
   return "general";
 }
 
-// ─── 출처별 DataLabel 결정 ───────────────────────────────────────────────────
+// ─── DataLabel ──────────────────────────────────────────────────────────────
 
 const OFFICIAL_SOURCES = ["spacex.com", "nasa.gov", "faa.gov", "fcc.gov"];
 
@@ -113,45 +139,46 @@ function detectLabel(sourceUrl: string): DataLabel {
   return "PUBLIC DATA";
 }
 
-// ─── 메인 파서 ──────────────────────────────────────────────────────────────
+// ─── RSS parser ─────────────────────────────────────────────────────────────
 
 export interface RSSArticle extends Article {
-  externalUrl: string; // 원문 링크 (Google 리다이렉트 포함)
+  externalUrl: string;
 }
 
-function parseRSS(xml: string): RSSArticle[] {
+function parseRSS(
+  xml: string,
+  opts: { skipFilter?: boolean; fallbackSource?: string } = {}
+): RSSArticle[] {
   const items: RSSArticle[] = [];
   const itemRe = /<item>([\s\S]*?)<\/item>/g;
   let match;
   let index = 0;
 
-  // RSS에서 최대 40개 파싱 시도 → 필터 후 30개 확보
   while ((match = itemRe.exec(xml)) !== null && items.length < 30) {
     const itemXml = match[1];
 
-    const rawTitle  = extractTag(itemXml, "title");
-    const link      = extractTag(itemXml, "link") || extractTag(itemXml, "guid");
-    const pubDate   = extractTag(itemXml, "pubDate");
-    const desc      = extractTag(itemXml, "description");
-    const srcInfo   = extractSource(itemXml);
+    const rawTitle = extractTag(itemXml, "title");
+    const link     = extractTag(itemXml, "link") || extractTag(itemXml, "guid");
+    const pubDate  = extractTag(itemXml, "pubDate");
+    const desc     = extractTag(itemXml, "description");
+    const srcInfo  = extractSource(itemXml);
 
-    // "기사 제목 - 언론사" 분리 (언론사가 source 태그에 없을 때 보완)
     const { title, pub } = splitGoogleTitle(rawTitle);
-    const sourceName = srcInfo.name !== "External" ? srcInfo.name : pub || "External";
+    const sourceName = srcInfo.name !== "External" ? srcInfo.name : pub || opts.fallbackSource || "External";
     const sourceUrl  = srcInfo.url;
 
-    // SpaceX 무관 기사 제외 (Grok, Tesla 등)
-    const combined = `${title} ${desc}`;
-    if (!isSpaceXRelevant(title, desc)) continue;
+    if (!opts.skipFilter && !isSpaceXRelevant(title, desc)) continue;
 
     const clean   = desc ? stripHTML(desc) : "";
     const excerpt = clean.length > 0 ? clean.slice(0, 200).trim() + "…" : "";
 
-    const category  = detectCategory(combined);
-    const dataLabel = detectLabel(sourceUrl);
+    const combined    = `${title} ${desc}`;
+    const category    = detectCategory(combined);
+    const dataLabel   = detectLabel(sourceUrl);
     const publishedAt = toISO(pubDate);
+    const imageUrl    = extractMediaImage(itemXml);
 
-    items.push({
+    const article: RSSArticle = {
       id: `rss-${index++}`,
       title,
       excerpt,
@@ -161,13 +188,34 @@ function parseRSS(xml: string): RSSArticle[] {
       publishedAt,
       externalUrl: link,
       source: { name: sourceName, url: sourceUrl || link },
-    });
+    };
+    if (imageUrl) article.imageUrl = imageUrl;
+
+    items.push(article);
   }
 
   return items;
 }
 
-// ─── 외부 호출 함수 ─────────────────────────────────────────────────────────
+// ─── Fetch helpers ──────────────────────────────────────────────────────────
+
+const RSS_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (compatible; OrbitNewsBot/1.0; +https://spcxwatch.vercel.app)",
+  Accept: "application/rss+xml, application/xml, text/xml, */*",
+};
+
+async function fetchFeed(
+  url: string,
+  opts: { skipFilter?: boolean; fallbackSource?: string } = {}
+): Promise<RSSArticle[]> {
+  const res = await fetch(url, { headers: RSS_HEADERS, next: { revalidate: 300 } });
+  if (!res.ok) throw new Error(`RSS ${url} responded ${res.status}`);
+  const xml = await res.text();
+  if (!xml.includes("<item>")) return [];
+  return parseRSS(xml, opts);
+}
+
+// ─── Main export ─────────────────────────────────────────────────────────────
 
 export interface FetchNewsResult {
   articles: RSSArticle[];
@@ -176,33 +224,26 @@ export interface FetchNewsResult {
   fetchedAt: string;
 }
 
-const RSS_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (compatible; OrbitNewsBot/1.0; +https://orbitnews.vercel.app)",
-  Accept: "application/rss+xml, application/xml, text/xml",
-};
-
-async function fetchFeed(url: string): Promise<RSSArticle[]> {
-  const res = await fetch(url, { headers: RSS_HEADERS, next: { revalidate: 300 } });
-  if (!res.ok) throw new Error(`RSS responded ${res.status}`);
-  const xml = await res.text();
-  if (!xml.includes("<item>")) return [];
-  return parseRSS(xml);
-}
-
 export async function fetchSpaceXNews(): Promise<FetchNewsResult> {
   try {
-    const [spaceXArticles, muskArticles] = await Promise.allSettled([
-      fetchFeed(RSS_URL),
-      fetchFeed(RSS_MUSK),
+    const allSettled = await Promise.allSettled([
+      // Direct feeds with embedded images (higher quality)
+      ...DIRECT_FEEDS.map((f) =>
+        fetchFeed(f.url, { skipFilter: f.skipFilter, fallbackSource: f.source })
+      ),
+      // Google News broad coverage
+      ...GOOGLE_FEEDS.map((url) => fetchFeed(url)),
     ]);
 
-    const a1 = spaceXArticles.status === "fulfilled" ? spaceXArticles.value : [];
-    const a2 = muskArticles.status   === "fulfilled" ? muskArticles.value   : [];
+    const allArticles: RSSArticle[] = [];
+    for (const result of allSettled) {
+      if (result.status === "fulfilled") allArticles.push(...result.value);
+    }
 
     // Deduplicate by first 60 chars of title (case-insensitive)
     const seen = new Set<string>();
     const merged: RSSArticle[] = [];
-    for (const art of [...a1, ...a2]) {
+    for (const art of allArticles) {
       const key = art.title.toLowerCase().slice(0, 60);
       if (!seen.has(key)) {
         seen.add(key);
@@ -210,9 +251,9 @@ export async function fetchSpaceXNews(): Promise<FetchNewsResult> {
       }
     }
 
-    // Sort newest-first, cap at 40
+    // Sort newest-first, cap at 50
     merged.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-    const articles = merged.slice(0, 40);
+    const articles = merged.slice(0, 50);
 
     if (articles.length === 0) throw new Error("No articles from any feed");
 
