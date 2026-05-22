@@ -6,8 +6,8 @@ const PEXELS_QUERIES: Record<Category, string> = {
   falcon:    "falcon rocket landing booster",
   nasa:      "nasa moon rocket artemis",
   launch:    "rocket launch liftoff fire",
-  business:  "spacex launch pad commercial rocket",
-  general:   "space exploration cosmos",
+  business:  "stock market wall street IPO trading finance",
+  general:   "financial charts investment data technology business",
 };
 
 interface PexelsPhoto {
