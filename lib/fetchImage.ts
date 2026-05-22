@@ -155,14 +155,14 @@ export async function fetchOGImage(url: string): Promise<string | undefined> {
 }
 
 /** 기사 배열에 OG 이미지를 병렬로 붙이기 (없는 기사만) */
-export async function attachOGImages<T extends { imageUrl?: string; externalUrl?: string }>(
-  articles: T[]
-): Promise<T[]> {
+export async function attachOGImages<
+  T extends { imageUrl?: string; externalUrl?: string; imageSource?: "rss" | "og" | "stock" }
+>(articles: T[]): Promise<T[]> {
   return Promise.all(
     articles.map(async (a) => {
       if (a.imageUrl || !a.externalUrl) return a;
       const og = await fetchOGImage(a.externalUrl);
-      return og ? { ...a, imageUrl: og } : a;
+      return og ? { ...a, imageUrl: og, imageSource: "og" as const } : a;
     })
   );
 }

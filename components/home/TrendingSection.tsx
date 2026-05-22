@@ -41,6 +41,11 @@ export default function TrendingSection({ articles }: { articles: Article[] }) {
                 </span>
                 {/* Gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-space-surface/80 via-transparent to-transparent" />
+                {article.imageSource === "stock" && (
+                  <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-black/60 text-white/80 backdrop-blur-sm">
+                    관련 자료
+                  </span>
+                )}
               </div>
 
               {/* Text */}

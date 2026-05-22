@@ -24,7 +24,7 @@ export default function LatestSection({ articles }: { articles: ArticleWithExter
           const inner = (
             <div className="card-space group flex gap-3 p-3">
               {/* Thumbnail */}
-              <div className="shrink-0 w-20 h-14 rounded overflow-hidden bg-space-elevated">
+              <div className="relative shrink-0 w-20 h-14 rounded overflow-hidden bg-space-elevated">
                 {article.imageUrl ? (
                   <Image
                     src={article.imageUrl}
@@ -35,6 +35,11 @@ export default function LatestSection({ articles }: { articles: ArticleWithExter
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-space-elevated to-space-surface" />
+                )}
+                {article.imageSource === "stock" && (
+                  <span className="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[7px] font-bold tracking-wider uppercase bg-black/60 text-white/80 text-center">
+                    관련 자료
+                  </span>
                 )}
               </div>
 

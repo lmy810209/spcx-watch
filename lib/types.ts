@@ -16,6 +16,8 @@ export interface Article {
   slug: string;
   publishedAt: string; // ISO string
   imageUrl?: string;
+  /** 이미지 출처: rss=기사 임베디드, og=원문 OG태그, stock=카테고리 폴백 사진 */
+  imageSource?: "rss" | "og" | "stock";
   source?: { name: string; url: string };
   viewCount?: number;
 }

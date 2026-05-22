@@ -59,13 +59,13 @@ function attachImages<T extends Article>(
   return articles.map((a) => {
     if (a.imageUrl) {
       if (usedUrls.has(a.imageUrl)) {
-        // RSS/OG 이미지가 다른 기사와 중복 → 카테고리 이미지로 폴백
+        // RSS/OG 이미지가 다른 기사와 중복 → 카테고리 이미지로 폴백 (stock)
         const imgs = imageMap[a.category];
         if (imgs && imgs.length > 0) {
           const start = titleHash(a.id + a.title) % imgs.length;
           const pick = pickUnused(imgs, start, usedUrls) ?? imgs[start];
           usedUrls.add(pick);
-          return { ...a, imageUrl: pick };
+          return { ...a, imageUrl: pick, imageSource: "stock" as const };
         }
         return a;
       }
@@ -78,7 +78,7 @@ function attachImages<T extends Article>(
       const pick = pickUnused(muskImages, start, usedUrls);
       if (pick) {
         usedUrls.add(pick);
-        return { ...a, imageUrl: pick };
+        return { ...a, imageUrl: pick, imageSource: "stock" as const };
       }
       // 머스크 이미지 풀 소진 → 카테고리로 폴백
     }
@@ -88,7 +88,7 @@ function attachImages<T extends Article>(
     const start = titleHash(a.id + a.title) % imgs.length;
     const pick = pickUnused(imgs, start, usedUrls) ?? imgs[start];
     usedUrls.add(pick);
-    return { ...a, imageUrl: pick };
+    return { ...a, imageUrl: pick, imageSource: "stock" as const };
   });
 }
 
@@ -199,6 +199,11 @@ export default async function HomePage() {
                         <div className="w-full h-full bg-gradient-to-br from-space-elevated to-space-surface" />
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-space-surface/60 to-transparent" />
+                      {article.imageSource === "stock" && (
+                        <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-black/60 text-white/80 backdrop-blur-sm">
+                          관련 자료
+                        </span>
+                      )}
                     </div>
 
                     {/* Text */}

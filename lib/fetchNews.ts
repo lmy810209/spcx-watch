@@ -1,10 +1,12 @@
 import type { Article, Category, DataLabel } from "./types";
 
 // ─── RSS Feed URLs ──────────────────────────────────────────────────────────
-// Direct space-news feeds that embed <media:content> images in each item
+// Direct space-news feeds with embedded images (<media:content> or HTML <img> in content:encoded)
 const DIRECT_FEEDS = [
-  { url: "https://arstechnica.com/space/feed/",  source: "Ars Technica", skipFilter: true },
-  { url: "https://www.space.com/feeds/all",       source: "Space.com",   skipFilter: false },
+  { url: "https://arstechnica.com/space/feed/",         source: "Ars Technica",        skipFilter: true  },
+  { url: "https://www.space.com/feeds/all",             source: "Space.com",           skipFilter: false },
+  { url: "https://spaceflightnow.com/feed/",            source: "Spaceflight Now",     skipFilter: true  },
+  { url: "https://www.nasaspaceflight.com/feed/",       source: "NASASpaceflight",     skipFilter: true  },
 ];
 
 // Google News broad-coverage feeds (no embedded images, uses OG fallback)
@@ -52,7 +54,27 @@ function extractSource(itemXml: string): { name: string; url: string } {
   return { name: "External", url: "" };
 }
 
-/** Extract embedded image URL from <media:content>, <media:thumbnail>, <enclosure> */
+/** Skip emoji, tracking pixels, icons */
+const JUNK_IMAGE_PATTERNS = [
+  /s\.w\.org\/images\/core\/emoji/i,
+  /\/wp-content\/plugins\//i,
+  /\/feed\/icon/i,
+  /gravatar\.com/i,
+  /pixel\.gif$/i,
+  /\.svg$/i,
+];
+
+function isJunkImage(url: string): boolean {
+  return JUNK_IMAGE_PATTERNS.some((p) => p.test(url));
+}
+
+function normalizeImageUrl(url: string): string {
+  // http→https (Spaceflight Now serves images as http)
+  if (url.startsWith("http://")) return "https://" + url.slice(7);
+  return url;
+}
+
+/** Extract embedded image URL — checks media tags first, then <content:encoded>/<description> HTML <img> */
 function extractMediaImage(itemXml: string): string | undefined {
   // <media:content url="..." type="image/..."> — prefer larger width
   const contents: { url: string; width: number }[] = [];
@@ -68,16 +90,36 @@ function extractMediaImage(itemXml: string): string | undefined {
   }
   if (contents.length > 0) {
     contents.sort((a, b) => b.width - a.width);
-    return contents[0].url;
+    return normalizeImageUrl(contents[0].url);
   }
 
   // <media:thumbnail url="...">
   const mt = itemXml.match(/<media:thumbnail\s[^>]*url="([^"]+)"/i);
-  if (mt) return mt[1];
+  if (mt && !isJunkImage(mt[1])) return normalizeImageUrl(mt[1]);
 
   // <enclosure url="..." type="image/...">
   const enc = itemXml.match(/<enclosure\s[^>]*url="([^"]+)"[^>]*type="image\/[^"]+"/i);
-  if (enc) return enc[1];
+  if (enc && !isJunkImage(enc[1])) return normalizeImageUrl(enc[1]);
+
+  // Fallback: parse HTML <img> from <content:encoded> or <description>
+  // Spaceflight Now / NASASpaceflight embed images here, not in media tags
+  const html = extractTag(itemXml, "content:encoded") || extractTag(itemXml, "description");
+  if (html) {
+    const imgs: { url: string; width: number }[] = [];
+    const imgRe = /<img\s[^>]*src="([^"]+\.(?:jpg|jpeg|png|webp))"[^>]*/gi;
+    let im: RegExpExecArray | null;
+    while ((im = imgRe.exec(html)) !== null) {
+      const url = im[1];
+      if (isJunkImage(url)) continue;
+      const wMatch = im[0].match(/width="(\d+)"/);
+      imgs.push({ url, width: wMatch ? parseInt(wMatch[1]) : 0 });
+    }
+    if (imgs.length > 0) {
+      // Prefer largest width; if none have width attrs, take the first
+      imgs.sort((a, b) => b.width - a.width);
+      return normalizeImageUrl(imgs[0].url);
+    }
+  }
 
   return undefined;
 }
@@ -189,7 +231,10 @@ function parseRSS(
       externalUrl: link,
       source: { name: sourceName, url: sourceUrl || link },
     };
-    if (imageUrl) article.imageUrl = imageUrl;
+    if (imageUrl) {
+      article.imageUrl = imageUrl;
+      article.imageSource = "rss";
+    }
 
     items.push(article);
   }
