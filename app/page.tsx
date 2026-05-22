@@ -1,101 +1,160 @@
-import Image from "next/image";
+import { getTrendingArticles, getMainHeadline, MOCK_ARTICLES } from "@/lib/articles";
+import { fetchSpaceXNews } from "@/lib/fetchNews";
+import { fetchCategoryImageMap, attachOGImages } from "@/lib/fetchImage";
+import type { Article, Category } from "@/lib/types";
+import TrendingSection from "@/components/home/TrendingSection";
+import MainHeadline from "@/components/home/MainHeadline";
+import LatestSection from "@/components/home/LatestSection";
+import ScenarioSignalFeed from "@/components/home/ScenarioSignalFeed";
+import WaitlistForm from "@/components/home/WaitlistForm";
+import CategoryBadge from "@/components/ui/CategoryBadge";
+import EstimateBadge from "@/components/ui/EstimateBadge";
+import { Wifi, WifiOff, ExternalLink } from "lucide-react";
 
-export default function Home() {
+export const revalidate = 300;
+
+function attachImages<T extends Article>(
+  articles: T[],
+  imageMap: Partial<Record<Category, string[]>>
+): T[] {
+  const counters: Partial<Record<Category, number>> = {};
+  return articles.map((a) => {
+    if (a.imageUrl) return a;
+    const imgs = imageMap[a.category];
+    if (!imgs || imgs.length === 0) return a;
+    const i = counters[a.category] ?? 0;
+    counters[a.category] = i + 1;
+    return { ...a, imageUrl: imgs[i % imgs.length] };
+  });
+}
+
+export default async function HomePage() {
+  const [rssResult, trending, headline] = await Promise.all([
+    fetchSpaceXNews(),
+    Promise.resolve(getTrendingArticles(5)),
+    Promise.resolve(getMainHeadline()),
+  ]);
+
+  const isLive = rssResult.ok && rssResult.articles.length > 0;
+
+  // Right column: latest 10
+  const rawLatest: Article[] = isLive
+    ? rssResult.articles.slice(0, 10)
+    : MOCK_ARTICLES.slice(0, 6);
+
+  // Center column below hero: next 8 RSS + mock analysis
+  const rawMore: Article[] = isLive
+    ? [
+        ...rssResult.articles.slice(10, 18),
+        ...MOCK_ARTICLES.filter((a) => a.dataLabel === "ANALYSIS"),
+      ].slice(0, 8)
+    : MOCK_ARTICLES;
+
+  // Step 1: OG 이미지 — RSS 기사 대상으로만 병렬 추출 (24h 캐시)
+  const [latestWithOG, moreWithOG] = await Promise.all([
+    attachOGImages(rawLatest),
+    attachOGImages(rawMore),
+  ]);
+
+  // Step 2: OG 이미지 없는 기사 → Pexels 카테고리 이미지 폴백
+  const allArticles = [...latestWithOG, ...moreWithOG, ...trending, headline];
+  const categorySet = new Set<Category>();
+  allArticles.filter((a) => !a.imageUrl).forEach((a) => categorySet.add(a.category));
+
+  const imageMap = categorySet.size > 0
+    ? await fetchCategoryImageMap(Array.from(categorySet))
+    : {};
+
+  const latestArticles  = attachImages(latestWithOG, imageMap);
+  const moreStories     = attachImages(moreWithOG, imageMap);
+  const trendingWithImg = attachImages(trending, imageMap);
+  const headlineWithImg = attachImages([headline], imageMap)[0];
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Status banner */}
+      <div className={`flex items-center gap-2 mb-4 px-3 py-2 rounded-md text-[11px] w-fit ${
+        isLive
+          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+          : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+      }`}>
+        {isLive
+          ? <><Wifi className="w-3 h-3" /> Live RSS — {rssResult.articles.length} articles</>
+          : <><WifiOff className="w-3 h-3" /> RSS unavailable — showing cached data</>
+        }
+      </div>
+
+      {/* ── 3-Column Grid ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr_260px] gap-6 items-start">
+
+        {/* LEFT: Trending + IPO Alert */}
+        <div className="flex flex-col gap-4">
+          <TrendingSection articles={trendingWithImg} />
+          <div className="card-space p-4">
+            <WaitlistForm />
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {/* CENTER: Hero + More Stories */}
+        <div className="flex flex-col gap-4">
+          <MainHeadline article={headlineWithImg} />
+
+          {/* More Stories */}
+          <div>
+            <div className="flex items-center justify-between mb-3 px-0.5">
+              <h2 className="text-[10px] font-bold tracking-[0.2em] uppercase text-space-muted">
+                More Stories
+              </h2>
+              {isLive && (
+                <span className="text-[10px] text-emerald-400/70">● LIVE</span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {moreStories.map((article) => {
+                const isExternal = "externalUrl" in article;
+                const href = isExternal
+                  ? (article as { externalUrl: string }).externalUrl
+                  : `/article/${article.slug}`;
+
+                return (
+                  <a
+                    key={article.id}
+                    href={href}
+                    target={isExternal ? "_blank" : undefined}
+                    rel={isExternal ? "noopener noreferrer" : undefined}
+                    className="card-space group flex flex-col gap-2 p-3"
+                  >
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <CategoryBadge category={article.category} />
+                      <EstimateBadge label={article.dataLabel} />
+                    </div>
+                    <h3 className="text-sm font-semibold text-space-primary group-hover:text-white leading-snug line-clamp-2 transition-colors">
+                      {article.title}
+                    </h3>
+                    <p className="text-xs text-space-body line-clamp-2 leading-relaxed">
+                      {article.excerpt}
+                    </p>
+                    {article.source && (
+                      <span className="text-[10px] text-space-muted mt-auto flex items-center gap-1">
+                        {article.source.name}
+                        {isExternal && <ExternalLink className="w-2.5 h-2.5" />}
+                      </span>
+                    )}
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT: Latest */}
+        <LatestSection articles={latestArticles} />
+      </div>
+
+      {/* ── Scenario Signal Feed ─────────────────────────────────────────── */}
+      <ScenarioSignalFeed />
+
+    </main>
   );
 }

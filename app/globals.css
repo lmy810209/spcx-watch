@@ -2,25 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────
+   SPACE COLOR TOKENS
+   배경 레이어가 3단계로 분리되어 카드가 "떠 있는" 느낌을 줌
+───────────────────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* 배경 레이어 */
+  --bg-base:      #0A0F1E;   /* 전체 사이트 배경 — 딥 네이비 차콜 */
+  --bg-surface:   #111827;   /* 카드·패널 배경 — 한 단계 밝음 */
+  --bg-elevated:  #1C2333;   /* 호버·활성 상태 — 두 단계 밝음 */
+
+  /* 테두리 */
+  --border-base:  #1E2D40;   /* 기본 테두리 */
+  --border-glow:  #2563EB40; /* 호버 글로우 (파랑 30%) */
+
+  /* 텍스트 */
+  --text-primary: #E2E8F0;   /* 헤드라인 — 오프화이트 */
+  --text-body:    #94A3B8;   /* 본문·설명 */
+  --text-muted:   #64748B;   /* 메타정보·타임스탬프 */
+
+  /* 포인트 컬러 */
+  --accent-blue:  #3B82F6;
+  --accent-glow:  #3B82F620;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ─────────────────────────────────────────────────────────────
+   BASE RESET
+───────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+  }
+
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
+/* ─────────────────────────────────────────────────────────────
+   SPACE UTILITY CLASSES
+   Tailwind만으로 표현이 번거로운 토큰 기반 유틸리티
+───────────────────────────────────────────────────────────── */
 @layer utilities {
+  /* 배경 */
+  .bg-space-base     { background-color: var(--bg-base); }
+  .bg-space-surface  { background-color: var(--bg-surface); }
+  .bg-space-elevated { background-color: var(--bg-elevated); }
+
+  /* 텍스트 */
+  .text-space-primary { color: var(--text-primary); }
+  .text-space-body    { color: var(--text-body); }
+  .text-space-muted   { color: var(--text-muted); }
+
+  /* 테두리 */
+  .border-space       { border-color: var(--border-base); }
+  .border-space-glow  { border-color: var(--border-glow); }
+
+  /* 카드 — 기본 */
+  .card-space {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-base);
+    border-radius: 0.5rem;
+    transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  /* 카드 — 호버 */
+  .card-space:hover {
+    background-color: var(--bg-elevated);
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 1px var(--border-glow), 0 4px 24px 0 rgba(59,130,246,0.08);
+  }
+
   .text-balance {
     text-wrap: balance;
   }
