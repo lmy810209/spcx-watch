@@ -38,23 +38,57 @@ function titleHash(s: string): number {
   return Math.abs(h);
 }
 
+function pickUnused(
+  candidates: string[],
+  startIdx: number,
+  used: Set<string>
+): string | undefined {
+  for (let i = 0; i < candidates.length; i++) {
+    const url = candidates[(startIdx + i) % candidates.length];
+    if (!used.has(url)) return url;
+  }
+  return undefined;
+}
+
 function attachImages<T extends Article>(
   articles: T[],
   imageMap: Partial<Record<Category, string[]>>,
-  muskImages: string[] = []
+  muskImages: string[],
+  usedUrls: Set<string>
 ): T[] {
-  const counters: Partial<Record<Category, number>> = {};
   return articles.map((a) => {
-    if (a.imageUrl) return a;
-    if (muskImages.length > 0 && MUSK_PATTERN.test(a.title)) {
-      const idx = titleHash(a.id + a.title) % muskImages.length;
-      return { ...a, imageUrl: muskImages[idx] };
+    if (a.imageUrl) {
+      if (usedUrls.has(a.imageUrl)) {
+        // RSS/OG 이미지가 다른 기사와 중복 → 카테고리 이미지로 폴백
+        const imgs = imageMap[a.category];
+        if (imgs && imgs.length > 0) {
+          const start = titleHash(a.id + a.title) % imgs.length;
+          const pick = pickUnused(imgs, start, usedUrls) ?? imgs[start];
+          usedUrls.add(pick);
+          return { ...a, imageUrl: pick };
+        }
+        return a;
+      }
+      usedUrls.add(a.imageUrl);
+      return a;
     }
+
+    if (muskImages.length > 0 && MUSK_PATTERN.test(a.title)) {
+      const start = titleHash(a.id + a.title) % muskImages.length;
+      const pick = pickUnused(muskImages, start, usedUrls);
+      if (pick) {
+        usedUrls.add(pick);
+        return { ...a, imageUrl: pick };
+      }
+      // 머스크 이미지 풀 소진 → 카테고리로 폴백
+    }
+
     const imgs = imageMap[a.category];
     if (!imgs || imgs.length === 0) return a;
-    const i = counters[a.category] ?? 0;
-    counters[a.category] = i + 1;
-    return { ...a, imageUrl: imgs[i % imgs.length] };
+    const start = titleHash(a.id + a.title) % imgs.length;
+    const pick = pickUnused(imgs, start, usedUrls) ?? imgs[start];
+    usedUrls.add(pick);
+    return { ...a, imageUrl: pick };
   });
 }
 
@@ -91,10 +125,12 @@ export default async function HomePage() {
     ? await fetchCategoryImageMap(Array.from(categorySet))
     : {};
 
-  const latestArticles  = attachImages(latestWithOG, imageMap, MUSK_IMAGES);
-  const moreStories     = attachImages(moreWithOG, imageMap, MUSK_IMAGES);
-  const trendingWithImg = attachImages(trending, imageMap, MUSK_IMAGES);
-  const headlineWithImg = attachImages([headline], imageMap, MUSK_IMAGES)[0];
+  // 모든 섹션에서 같은 이미지 URL이 두 번 쓰이지 않도록 전역 추적
+  const usedUrls = new Set<string>();
+  const headlineWithImg = attachImages([headline], imageMap, MUSK_IMAGES, usedUrls)[0];
+  const trendingWithImg = attachImages(trending, imageMap, MUSK_IMAGES, usedUrls);
+  const latestArticles  = attachImages(latestWithOG, imageMap, MUSK_IMAGES, usedUrls);
+  const moreStories     = attachImages(moreWithOG, imageMap, MUSK_IMAGES, usedUrls);
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
