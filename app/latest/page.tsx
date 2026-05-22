@@ -14,17 +14,43 @@ export const metadata: Metadata = {
   description: "Full archive of SpaceX IPO news and scenario analysis articles.",
 };
 
-export default async function LatestPage() {
-  const rssResult = await fetchSpaceXNews();
-  const isLive = rssResult.ok && rssResult.articles.length > 0;
+const PAGE_SIZE = 30;
 
-  const articles = isLive
-    ? [...rssResult.articles, ...MOCK_ARTICLES]
-    : MOCK_ARTICLES;
+interface PageProps {
+  searchParams: { before?: string };
+}
+
+export default async function LatestPage({ searchParams }: PageProps) {
+  const cursor = searchParams.before;
+
+  // 첫 페이지는 fetchSpaceXNews (RSS fetch + DB upsert + DB 읽기)
+  // 이후 페이지는 DB에서 cursor 이전 기사
+  let articles;
+  let isLive = false;
+  let totalShown = 0;
+
+  if (cursor) {
+    try {
+      const { getArticlesBefore } = await import("@/lib/articlesDB");
+      const older = await getArticlesBefore(cursor, PAGE_SIZE);
+      articles = older.length > 0 ? older : MOCK_ARTICLES;
+      isLive = older.length > 0;
+      totalShown = older.length;
+    } catch {
+      articles = MOCK_ARTICLES;
+    }
+  } else {
+    const rssResult = await fetchSpaceXNews(PAGE_SIZE);
+    isLive = rssResult.ok && rssResult.articles.length > 0;
+    articles = isLive ? rssResult.articles : MOCK_ARTICLES;
+    totalShown = rssResult.articles.length;
+  }
+
+  const oldestPublishedAt = articles[articles.length - 1]?.publishedAt;
+  const hasNext = isLive && articles.length === PAGE_SIZE && oldestPublishedAt;
 
   return (
     <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-      {/* Back */}
       <Link
         href="/"
         className="inline-flex items-center gap-1.5 text-sm text-space-muted hover:text-space-primary transition-colors mb-6"
@@ -34,14 +60,16 @@ export default async function LatestPage() {
       </Link>
 
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-space-primary">Latest Articles</h1>
+        <h1 className="text-2xl font-bold text-space-primary">
+          {cursor ? "Older Articles" : "Latest Articles"}
+        </h1>
         <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] ${
           isLive
             ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
             : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
         }`}>
           {isLive
-            ? <><Wifi className="w-3 h-3" /> Live RSS — {rssResult.articles.length}</>
+            ? <><Wifi className="w-3 h-3" /> {totalShown} articles</>
             : <><WifiOff className="w-3 h-3" /> Cached</>
           }
         </div>
@@ -92,6 +120,28 @@ export default async function LatestPage() {
           );
         })}
       </div>
+
+      {/* Pagination */}
+      {hasNext && (
+        <div className="mt-8 flex justify-center">
+          <Link
+            href={`/latest?before=${encodeURIComponent(oldestPublishedAt)}`}
+            className="px-6 py-2.5 text-sm text-space-muted hover:text-space-accent border border-space-border hover:border-space-accent/40 rounded-lg transition-colors"
+          >
+            Older Articles →
+          </Link>
+        </div>
+      )}
+      {cursor && (
+        <div className="mt-4 flex justify-center">
+          <Link
+            href="/latest"
+            className="text-xs text-space-muted hover:text-space-accent transition-colors"
+          >
+            ← Back to most recent
+          </Link>
+        </div>
+      )}
     </main>
   );
 }

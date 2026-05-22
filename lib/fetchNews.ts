@@ -151,17 +151,22 @@ const KEYWORD_MAP: { pattern: RegExp; category: Category }[] = [
   { pattern: /ipo|valuation|flotation|contract|investment|revenue|deal|stock/i, category: "business" },
 ];
 
-const SPACEX_RELEVANCE = /spacex|starship|starlink|falcon|rocket|launch|orbit|space\s*x|elon.{0,20}space|reusab|booster|raptor|boca\s*chica|starbase|nasa|faa|payload|satellite/i;
-const IRRELEVANT_TOPICS = /grok|tesla|twitter|x\.com|neuralink|boring\s*company|doge|dogecoin|crypto|bitcoin|ai\s*chatbot|openai|chatgpt/i;
-const SPACE_CORE = /spacex|starship|starlink|falcon|rocket|launch|orbit/i;
+// SpaceX 직접 관련 키워드 — 이 중 하나는 제목 또는 첫 문장에 반드시 포함되어야 통과
+const STRICT_SPACEX = /spacex|space\s*x|starship|starlink|falcon\s?9|falcon\s?heavy|raptor\s+engine|boca\s*chica|starbase|crew\s*dragon|cargo\s*dragon|elon\s+musk/i;
+
+const IRRELEVANT_TOPICS = /grok|tesla|twitter|x\.com|neuralink|boring\s*company|doge|dogecoin|crypto|bitcoin|ai\s*chatbot|openai|chatgpt|mandalorian|star\s*wars|for\s*all\s*mankind|binoculars?\s*review|telescope\s*review|conspiracy|astrology|horoscope/i;
 
 function isSpaceXRelevant(title: string, desc: string): boolean {
+  // SpaceX 직접 키워드가 제목/본문 어디든 있어야 통과
+  const text = `${title} ${desc}`;
+  if (!STRICT_SPACEX.test(text)) return false;
+
+  // 무관 주제가 SpaceX 키워드보다 앞에 오면 거부 (e.g. "Mandalorian Lego rocket")
   const titleLower = title.toLowerCase();
   const irrelevantPos = titleLower.search(IRRELEVANT_TOPICS);
-  const spacePos      = titleLower.search(SPACE_CORE);
-  if (irrelevantPos !== -1 && (spacePos === -1 || irrelevantPos < spacePos)) return false;
-  const text = `${title} ${desc}`;
-  if (IRRELEVANT_TOPICS.test(text) && !SPACEX_RELEVANCE.test(text)) return false;
+  const spacexPos    = titleLower.search(STRICT_SPACEX);
+  if (irrelevantPos !== -1 && (spacexPos === -1 || irrelevantPos < spacexPos)) return false;
+
   return true;
 }
 
@@ -269,39 +274,59 @@ export interface FetchNewsResult {
   fetchedAt: string;
 }
 
-export async function fetchSpaceXNews(): Promise<FetchNewsResult> {
+/** RSS 6개 피드 fetch + 중복 제거 (DB 미사용, 순수 라이브) */
+async function fetchLiveArticles(): Promise<RSSArticle[]> {
+  const allSettled = await Promise.allSettled([
+    ...DIRECT_FEEDS.map((f) =>
+      fetchFeed(f.url, { skipFilter: f.skipFilter, fallbackSource: f.source })
+    ),
+    ...GOOGLE_FEEDS.map((url) => fetchFeed(url)),
+  ]);
+
+  const allArticles: RSSArticle[] = [];
+  for (const result of allSettled) {
+    if (result.status === "fulfilled") allArticles.push(...result.value);
+  }
+
+  const seen = new Set<string>();
+  const merged: RSSArticle[] = [];
+  for (const art of allArticles) {
+    const key = art.title.toLowerCase().slice(0, 60);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(art);
+    }
+  }
+
+  merged.sort(
+    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  );
+  return merged.slice(0, 50);
+}
+
+/**
+ * 메인 호출: RSS fetch → DB upsert → DB에서 최근 N개 반환.
+ * DB 사용 불가 시 RSS 결과를 그대로 반환 (graceful fallback).
+ */
+export async function fetchSpaceXNews(limit = 50): Promise<FetchNewsResult> {
   try {
-    const allSettled = await Promise.allSettled([
-      // Direct feeds with embedded images (higher quality)
-      ...DIRECT_FEEDS.map((f) =>
-        fetchFeed(f.url, { skipFilter: f.skipFilter, fallbackSource: f.source })
-      ),
-      // Google News broad coverage
-      ...GOOGLE_FEEDS.map((url) => fetchFeed(url)),
-    ]);
+    const liveArticles = await fetchLiveArticles();
+    if (liveArticles.length === 0) throw new Error("No articles from any feed");
 
-    const allArticles: RSSArticle[] = [];
-    for (const result of allSettled) {
-      if (result.status === "fulfilled") allArticles.push(...result.value);
+    // DB 모듈은 동적 임포트 — Supabase env 없을 때 빌드 깨지지 않도록
+    let dbArticles: RSSArticle[] = [];
+    let dbOk = false;
+    try {
+      const { saveArticles, getRecentArticles } = await import("./articlesDB");
+      const saved = await saveArticles(liveArticles);
+      dbArticles = await getRecentArticles(limit);
+      dbOk = dbArticles.length > 0;
+      console.log(`[fetchSpaceXNews] live=${liveArticles.length} saved=${saved} db=${dbArticles.length}`);
+    } catch (dbErr) {
+      console.warn("[fetchSpaceXNews] DB unavailable, using live only:", dbErr);
     }
 
-    // Deduplicate by first 60 chars of title (case-insensitive)
-    const seen = new Set<string>();
-    const merged: RSSArticle[] = [];
-    for (const art of allArticles) {
-      const key = art.title.toLowerCase().slice(0, 60);
-      if (!seen.has(key)) {
-        seen.add(key);
-        merged.push(art);
-      }
-    }
-
-    // Sort newest-first, cap at 50
-    merged.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-    const articles = merged.slice(0, 50);
-
-    if (articles.length === 0) throw new Error("No articles from any feed");
-
+    const articles = dbOk ? dbArticles : liveArticles;
     return { articles, ok: true, source: "rss", fetchedAt: new Date().toISOString() };
   } catch (err) {
     console.warn("[fetchSpaceXNews] RSS fetch failed:", err);

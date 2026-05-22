@@ -39,16 +39,27 @@ export default async function CategoryPage({ params }: Props) {
 
   const label = CATEGORY_LABELS[category];
 
-  // Fetch RSS + category images in parallel
+  // DB가 살아있으면 카테고리별 누적 기사를, 아니면 라이브 RSS에서 필터링
+  // 1) fetchSpaceXNews를 먼저 호출해 RSS→DB upsert 트리거
+  // 2) 동시에 카테고리 이미지 fetch
   const [rssResult, categoryImages] = await Promise.all([
     fetchSpaceXNews(),
     fetchImagesForCategory(category, 5),
   ]);
   const isLive = rssResult.ok && rssResult.articles.length > 0;
 
-  const rssFiltered = isLive
-    ? rssResult.articles.filter((a) => a.category === category)
-    : [];
+  // 3) DB에서 카테고리별 누적 기사 조회 (실패 시 라이브 결과로 폴백)
+  let categoryArticles: typeof rssResult.articles = [];
+  try {
+    const { getArticlesByCategory } = await import("@/lib/articlesDB");
+    categoryArticles = await getArticlesByCategory(category, 60);
+  } catch {
+    /* DB 없으면 무시 */
+  }
+
+  const rssFiltered = categoryArticles.length > 0
+    ? categoryArticles
+    : (isLive ? rssResult.articles.filter((a) => a.category === category) : []);
 
   const mockFiltered = MOCK_ARTICLES.filter((a) => a.category === category);
 

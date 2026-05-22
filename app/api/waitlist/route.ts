@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerClient, PG_UNIQUE_VIOLATION } from "@/lib/supabase";
+import { createServerClient, PG_UNIQUE_VIOLATION, isSupabaseConfigured } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
@@ -15,6 +15,13 @@ export async function POST(req: Request) {
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Please enter a valid email address." }, { status: 422 });
+  }
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Waitlist temporarily unavailable. Please try again later.", code: "DB_NOT_CONFIGURED" },
+      { status: 503 }
+    );
   }
 
   try {
