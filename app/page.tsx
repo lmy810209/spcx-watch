@@ -18,38 +18,24 @@ export const revalidate = 300;
 
 const MUSK_PATTERN = /\belon\b|\bmusk\b/i;
 
-// Wikimedia Commons — CC-BY / CC-BY-SA public-domain portraits of Elon Musk
+// Wikimedia Commons — CC-BY / CC-BY-SA, landscape-only (ratio > 1.0)
 const MUSK_IMAGES = [
-  // 2025
-  "https://upload.wikimedia.org/wikipedia/commons/8/8d/Elon_Musk_%282025%29_%28cropped%29.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/c/c1/Elon_Musk_2025_%28cropped%29.jpg",
-  // 2024
-  "https://upload.wikimedia.org/wikipedia/commons/d/d0/Elon_Musk_-_March_28%2C_2024_%28cropped%29.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/Elon_Musk_-_March_28%2C_2024.jpg/640px-Elon_Musk_-_March_28%2C_2024.jpg",
-  // 2023
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Elon_Musk_in_2023_%28cropped%29.jpg/640px-Elon_Musk_in_2023_%28cropped%29.jpg",
-  // 2022
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/Elon_Musk_April_2022.jpg/640px-Elon_Musk_April_2022.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/9/99/Elon_Musk_Colorado_2022_%28cropped2%29.jpg",
-  // 2021
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Elon_Musk_2021.jpg/640px-Elon_Musk_2021.jpg",
-  // 2019
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Elon_Musk_2019.jpg/640px-Elon_Musk_2019.jpg",
-  // 2018
-  "https://upload.wikimedia.org/wikipedia/commons/0/06/Elon_Musk%2C_2018_%28cropped%29.jpg",
-  // SpaceX visit (2019, USAF)
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/SpaceX_CEO_Elon_Musk_visits_N%26NC_and_AFSPC_%28190416-F-ZZ999-006%29.jpg/640px-SpaceX_CEO_Elon_Musk_visits_N%26NC_and_AFSPC_%28190416-F-ZZ999-006%29.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/f/f4/USAFA_Hosts_Elon_Musk_%28Image_1_of_17%29_%28cropped%29.jpg",
-  // Royal Society
-  "https://upload.wikimedia.org/wikipedia/commons/8/85/Elon_Musk_Royal_Society_%28crop1%29.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Elon_Musk_Royal_Society_%28crop2%29.jpg/640px-Elon_Musk_Royal_Society_%28crop2%29.jpg",
-  // 2015
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/Elon_Musk_2015.jpg/640px-Elon_Musk_2015.jpg",
-  // Press / Stage
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Elon_Musk_at_a_Press_Conference.jpg/640px-Elon_Musk_at_a_Press_Conference.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Happy_Elon_Musk_%2852005460639%29.jpg/640px-Happy_Elon_Musk_%2852005460639%29.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Elon_Musk_%28cropped%29.jpg/640px-Elon_Musk_%28cropped%29.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Elon_Musk_%2812270805983%29.jpg/800px-Elon_Musk_%2812270805983%29.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Elon_Musk_%2812270807823%29.jpg/800px-Elon_Musk_%2812270807823%29.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Elon_Musk_%2812271217906%29.jpg/800px-Elon_Musk_%2812271217906%29.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Elon_Musk_%283017880199%29.jpg/800px-Elon_Musk_%283017880199%29.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Elon_Musk_-_The_Summit_2013.jpg/800px-Elon_Musk_-_The_Summit_2013.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Elon_Musk_4670874048_7c12d5503a_o.jpg/800px-Elon_Musk_4670874048_7c12d5503a_o.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Elon_Musk_at_a_Press_Conference.jpg/800px-Elon_Musk_at_a_Press_Conference.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg/800px-Elon_Musk_at_the_Tesla_ASM_and_Battery_Day.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Mohammad_Al_Gergawi_and_Elon_Musk_session.jpg/800px-Mohammad_Al_Gergawi_and_Elon_Musk_session.jpg",
 ];
+
+function titleHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
 
 function attachImages<T extends Article>(
   articles: T[],
@@ -57,12 +43,10 @@ function attachImages<T extends Article>(
   muskImages: string[] = []
 ): T[] {
   const counters: Partial<Record<Category, number>> = {};
-  let muskCounter = 0;
   return articles.map((a) => {
     if (a.imageUrl) return a;
     if (muskImages.length > 0 && MUSK_PATTERN.test(a.title)) {
-      const idx = muskCounter % muskImages.length;
-      muskCounter++;
+      const idx = titleHash(a.id + a.title) % muskImages.length;
       return { ...a, imageUrl: muskImages[idx] };
     }
     const imgs = imageMap[a.category];
