@@ -1,15 +1,18 @@
+import Image from "next/image";
+import Link from "next/link";
 import { getTrendingArticles, getMainHeadline, MOCK_ARTICLES } from "@/lib/articles";
 import { fetchSpaceXNews } from "@/lib/fetchNews";
 import { fetchCategoryImageMap, attachOGImages } from "@/lib/fetchImage";
 import type { Article, Category } from "@/lib/types";
+import { CATEGORY_LABELS } from "@/lib/types";
 import TrendingSection from "@/components/home/TrendingSection";
 import MainHeadline from "@/components/home/MainHeadline";
 import LatestSection from "@/components/home/LatestSection";
 import ScenarioSignalFeed from "@/components/home/ScenarioSignalFeed";
 import WaitlistForm from "@/components/home/WaitlistForm";
-import CategoryBadge from "@/components/ui/CategoryBadge";
 import EstimateBadge from "@/components/ui/EstimateBadge";
 import { Wifi, WifiOff, ExternalLink } from "lucide-react";
+import { formatTimeAgo } from "@/lib/articles";
 
 export const revalidate = 300;
 
@@ -37,26 +40,22 @@ export default async function HomePage() {
 
   const isLive = rssResult.ok && rssResult.articles.length > 0;
 
-  // Right column: latest 10
   const rawLatest: Article[] = isLive
-    ? rssResult.articles.slice(0, 10)
-    : MOCK_ARTICLES.slice(0, 6);
+    ? rssResult.articles.slice(0, 12)
+    : MOCK_ARTICLES.slice(0, 8);
 
-  // Center column below hero: next 8 RSS + mock analysis
   const rawMore: Article[] = isLive
     ? [
-        ...rssResult.articles.slice(10, 18),
+        ...rssResult.articles.slice(12, 22),
         ...MOCK_ARTICLES.filter((a) => a.dataLabel === "ANALYSIS"),
-      ].slice(0, 8)
+      ].slice(0, 10)
     : MOCK_ARTICLES;
 
-  // Step 1: OG 이미지 — RSS 기사 대상으로만 병렬 추출 (24h 캐시)
   const [latestWithOG, moreWithOG] = await Promise.all([
     attachOGImages(rawLatest),
     attachOGImages(rawMore),
   ]);
 
-  // Step 2: OG 이미지 없는 기사 → Pexels 카테고리 이미지 폴백
   const allArticles = [...latestWithOG, ...moreWithOG, ...trending, headline];
   const categorySet = new Set<Category>();
   allArticles.filter((a) => !a.imageUrl).forEach((a) => categorySet.add(a.category));
@@ -102,14 +101,13 @@ export default async function HomePage() {
 
           {/* More Stories */}
           <div>
-            <div className="flex items-center justify-between mb-3 px-0.5">
+            <div className="flex items-center justify-between mb-3">
               <h2 className="text-[10px] font-bold tracking-[0.2em] uppercase text-space-muted">
                 More Stories
               </h2>
-              {isLive && (
-                <span className="text-[10px] text-emerald-400/70">● LIVE</span>
-              )}
+              {isLive && <span className="text-[10px] text-emerald-400/70">● LIVE</span>}
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {moreStories.map((article) => {
                 const isExternal = "externalUrl" in article;
@@ -123,28 +121,55 @@ export default async function HomePage() {
                     href={href}
                     target={isExternal ? "_blank" : undefined}
                     rel={isExternal ? "noopener noreferrer" : undefined}
-                    className="card-space group flex flex-col gap-2 p-3"
+                    className="card-space group overflow-hidden flex flex-col"
                   >
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <CategoryBadge category={article.category} />
-                      <EstimateBadge label={article.dataLabel} />
+                    {/* Thumbnail */}
+                    <div className="relative w-full h-32 bg-space-elevated overflow-hidden shrink-0">
+                      {article.imageUrl ? (
+                        <Image
+                          src={article.imageUrl}
+                          alt={article.title}
+                          fill
+                          className="object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-space-elevated to-space-surface" />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-space-surface/60 to-transparent" />
                     </div>
-                    <h3 className="text-sm font-semibold text-space-primary group-hover:text-white leading-snug line-clamp-2 transition-colors">
-                      {article.title}
-                    </h3>
-                    <p className="text-xs text-space-body line-clamp-2 leading-relaxed">
-                      {article.excerpt}
-                    </p>
-                    {article.source && (
-                      <span className="text-[10px] text-space-muted mt-auto flex items-center gap-1">
-                        {article.source.name}
-                        {isExternal && <ExternalLink className="w-2.5 h-2.5" />}
-                      </span>
-                    )}
+
+                    {/* Text */}
+                    <div className="p-3 flex flex-col gap-1.5 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[9px] font-bold tracking-widest uppercase text-space-accent">
+                          {CATEGORY_LABELS[article.category]}
+                        </span>
+                        <span className="text-[9px] text-space-muted">
+                          {formatTimeAgo(article.publishedAt)}
+                        </span>
+                        <EstimateBadge label={article.dataLabel} />
+                        {isExternal && <ExternalLink className="w-2.5 h-2.5 text-space-muted" />}
+                      </div>
+                      <h3 className="text-[13px] font-bold text-space-primary group-hover:text-white leading-snug line-clamp-2 transition-colors">
+                        {article.title}
+                      </h3>
+                      {article.source && (
+                        <span className="text-[10px] text-space-muted mt-auto">
+                          {article.source.name}
+                        </span>
+                      )}
+                    </div>
                   </a>
                 );
               })}
             </div>
+
+            <Link
+              href="/latest"
+              className="mt-3 block py-2.5 text-center text-xs text-space-muted hover:text-space-accent border border-space-border hover:border-space-accent/40 rounded-lg transition-colors"
+            >
+              View all articles →
+            </Link>
           </div>
         </div>
 
