@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { getTrendingArticles, getMainHeadline, MOCK_ARTICLES } from "@/lib/articles";
 import { fetchSpaceXNews } from "@/lib/fetchNews";
-import { fetchCategoryImageMap, attachOGImages, fetchImagesForQuery } from "@/lib/fetchImage";
+import { fetchCategoryImageMap, attachOGImages } from "@/lib/fetchImage";
 import type { Article, Category } from "@/lib/types";
 import { CATEGORY_LABELS } from "@/lib/types";
 import TrendingSection from "@/components/home/TrendingSection";
@@ -17,6 +17,15 @@ import { formatTimeAgo } from "@/lib/articles";
 export const revalidate = 300;
 
 const MUSK_PATTERN = /\belon\b|\bmusk\b/i;
+
+// Wikimedia Commons — CC-BY / CC-BY-SA public-domain portraits
+const MUSK_IMAGES = [
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Elon_Musk_%28cropped%29.jpg/640px-Elon_Musk_%28cropped%29.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/Elon_Musk_2015.jpg/640px-Elon_Musk_2015.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/8/85/Elon_Musk_Royal_Society_%28crop1%29.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Elon_Musk_Royal_Society_%28crop2%29.jpg/640px-Elon_Musk_Royal_Society_%28crop2%29.jpg",
+  "https://upload.wikimedia.org/wikipedia/commons/9/99/Elon_Musk_Colorado_2022_%28cropped2%29.jpg",
+];
 
 function attachImages<T extends Article>(
   articles: T[],
@@ -69,15 +78,14 @@ export default async function HomePage() {
   const categorySet = new Set<Category>();
   allArticles.filter((a) => !a.imageUrl).forEach((a) => categorySet.add(a.category));
 
-  const [imageMap, muskImages] = await Promise.all([
-    categorySet.size > 0 ? fetchCategoryImageMap(Array.from(categorySet)) : Promise.resolve({}),
-    fetchImagesForQuery("elon musk spacex portrait", 6),
-  ]);
+  const imageMap = categorySet.size > 0
+    ? await fetchCategoryImageMap(Array.from(categorySet))
+    : {};
 
-  const latestArticles  = attachImages(latestWithOG, imageMap, muskImages);
-  const moreStories     = attachImages(moreWithOG, imageMap, muskImages);
-  const trendingWithImg = attachImages(trending, imageMap, muskImages);
-  const headlineWithImg = attachImages([headline], imageMap, muskImages)[0];
+  const latestArticles  = attachImages(latestWithOG, imageMap, MUSK_IMAGES);
+  const moreStories     = attachImages(moreWithOG, imageMap, MUSK_IMAGES);
+  const trendingWithImg = attachImages(trending, imageMap, MUSK_IMAGES);
+  const headlineWithImg = attachImages([headline], imageMap, MUSK_IMAGES)[0];
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
