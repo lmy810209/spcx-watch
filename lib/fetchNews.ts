@@ -1,8 +1,10 @@
 import type { Article, Category, DataLabel } from "./types";
 
-// ─── Google News RSS URL ────────────────────────────────────────────────────
+// ─── Google News RSS URLs ───────────────────────────────────────────────────
 const RSS_URL =
   "https://news.google.com/rss/search?q=SpaceX&hl=en-US&gl=US&ceid=US:en";
+const RSS_MUSK =
+  "https://news.google.com/rss/search?q=%22Elon+Musk%22+SpaceX&hl=en-US&gl=US&ceid=US:en";
 
 // ─── XML 파싱 유틸리티 ──────────────────────────────────────────────────────
 
@@ -174,30 +176,48 @@ export interface FetchNewsResult {
   fetchedAt: string;
 }
 
+const RSS_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (compatible; OrbitNewsBot/1.0; +https://orbitnews.vercel.app)",
+  Accept: "application/rss+xml, application/xml, text/xml",
+};
+
+async function fetchFeed(url: string): Promise<RSSArticle[]> {
+  const res = await fetch(url, { headers: RSS_HEADERS, next: { revalidate: 300 } });
+  if (!res.ok) throw new Error(`RSS responded ${res.status}`);
+  const xml = await res.text();
+  if (!xml.includes("<item>")) return [];
+  return parseRSS(xml);
+}
+
 export async function fetchSpaceXNews(): Promise<FetchNewsResult> {
   try {
-    const res = await fetch(RSS_URL, {
-      headers: {
-        // 일부 RSS 서버가 bot 차단 → 브라우저 UA 사용
-        "User-Agent":
-          "Mozilla/5.0 (compatible; OrbitNewsBot/1.0; +https://orbitnews.vercel.app)",
-        Accept: "application/rss+xml, application/xml, text/xml",
-      },
-      // Next.js 캐시: 5분마다 재검증
-      next: { revalidate: 300 },
-    });
+    const [spaceXArticles, muskArticles] = await Promise.allSettled([
+      fetchFeed(RSS_URL),
+      fetchFeed(RSS_MUSK),
+    ]);
 
-    if (!res.ok) throw new Error(`RSS responded ${res.status}`);
+    const a1 = spaceXArticles.status === "fulfilled" ? spaceXArticles.value : [];
+    const a2 = muskArticles.status   === "fulfilled" ? muskArticles.value   : [];
 
-    const xml = await res.text();
+    // Deduplicate by first 60 chars of title (case-insensitive)
+    const seen = new Set<string>();
+    const merged: RSSArticle[] = [];
+    for (const art of [...a1, ...a2]) {
+      const key = art.title.toLowerCase().slice(0, 60);
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(art);
+      }
+    }
 
-    // Google News가 빈 피드를 줬는지 확인
-    if (!xml.includes("<item>")) throw new Error("No items in RSS feed");
+    // Sort newest-first, cap at 40
+    merged.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    const articles = merged.slice(0, 40);
 
-    const articles = parseRSS(xml);
+    if (articles.length === 0) throw new Error("No articles from any feed");
+
     return { articles, ok: true, source: "rss", fetchedAt: new Date().toISOString() };
   } catch (err) {
-    // 실패 시 빈 배열 반환 — 호출부에서 mock fallback 처리
     console.warn("[fetchSpaceXNews] RSS fetch failed:", err);
     return { articles: [], ok: false, source: "fallback", fetchedAt: new Date().toISOString() };
   }

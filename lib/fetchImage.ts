@@ -17,6 +17,26 @@ interface PexelsResponse {
   photos: PexelsPhoto[];
 }
 
+/** 임의 쿼리로 Pexels 이미지 배열 반환 */
+export async function fetchImagesForQuery(
+  query: string,
+  count = 5
+): Promise<string[]> {
+  const pexelsKey = process.env.PEXELS_API_KEY;
+  if (!pexelsKey) return [];
+  try {
+    const res = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${count}&orientation=landscape`,
+      { headers: { Authorization: pexelsKey }, next: { revalidate: 86400 } }
+    );
+    if (!res.ok) return [];
+    const data: PexelsResponse = await res.json();
+    return (data.photos ?? []).map((p) => p.src.large2x || p.src.large).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 /** 카테고리에 맞는 이미지 URL 배열 반환 (최대 count장) */
 export async function fetchImagesForCategory(
   category: Category,

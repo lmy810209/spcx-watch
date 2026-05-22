@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { getTrendingArticles, getMainHeadline, MOCK_ARTICLES } from "@/lib/articles";
 import { fetchSpaceXNews } from "@/lib/fetchNews";
-import { fetchCategoryImageMap, attachOGImages } from "@/lib/fetchImage";
+import { fetchCategoryImageMap, attachOGImages, fetchImagesForQuery } from "@/lib/fetchImage";
 import type { Article, Category } from "@/lib/types";
 import { CATEGORY_LABELS } from "@/lib/types";
 import TrendingSection from "@/components/home/TrendingSection";
@@ -16,13 +16,22 @@ import { formatTimeAgo } from "@/lib/articles";
 
 export const revalidate = 300;
 
+const MUSK_PATTERN = /\belon\b|\bmusk\b/i;
+
 function attachImages<T extends Article>(
   articles: T[],
-  imageMap: Partial<Record<Category, string[]>>
+  imageMap: Partial<Record<Category, string[]>>,
+  muskImages: string[] = []
 ): T[] {
   const counters: Partial<Record<Category, number>> = {};
+  let muskCounter = 0;
   return articles.map((a) => {
     if (a.imageUrl) return a;
+    if (muskImages.length > 0 && MUSK_PATTERN.test(a.title)) {
+      const idx = muskCounter % muskImages.length;
+      muskCounter++;
+      return { ...a, imageUrl: muskImages[idx] };
+    }
     const imgs = imageMap[a.category];
     if (!imgs || imgs.length === 0) return a;
     const i = counters[a.category] ?? 0;
@@ -60,14 +69,15 @@ export default async function HomePage() {
   const categorySet = new Set<Category>();
   allArticles.filter((a) => !a.imageUrl).forEach((a) => categorySet.add(a.category));
 
-  const imageMap = categorySet.size > 0
-    ? await fetchCategoryImageMap(Array.from(categorySet))
-    : {};
+  const [imageMap, muskImages] = await Promise.all([
+    categorySet.size > 0 ? fetchCategoryImageMap(Array.from(categorySet)) : Promise.resolve({}),
+    fetchImagesForQuery("elon musk spacex portrait", 6),
+  ]);
 
-  const latestArticles  = attachImages(latestWithOG, imageMap);
-  const moreStories     = attachImages(moreWithOG, imageMap);
-  const trendingWithImg = attachImages(trending, imageMap);
-  const headlineWithImg = attachImages([headline], imageMap)[0];
+  const latestArticles  = attachImages(latestWithOG, imageMap, muskImages);
+  const moreStories     = attachImages(moreWithOG, imageMap, muskImages);
+  const trendingWithImg = attachImages(trending, imageMap, muskImages);
+  const headlineWithImg = attachImages([headline], imageMap, muskImages)[0];
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
